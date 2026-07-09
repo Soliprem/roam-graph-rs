@@ -6,6 +6,7 @@ const hideOrphansInput = document.querySelector("#hideOrphans");
 const showLabelsInput = document.querySelector("#showLabels");
 const darkModeInput = document.querySelector("#darkMode");
 const gravityInput = document.querySelector("#gravity");
+const hubPullInput = document.querySelector("#hubPull");
 const repulsionInput = document.querySelector("#repulsion");
 const inertiaInput = document.querySelector("#inertia");
 const textSizeInput = document.querySelector("#textSize");
@@ -169,6 +170,7 @@ function tick() {
   const edges = visibleEdges;
   const alpha = Math.max(0, Math.min(1, energy));
   const gravity = Number(gravityInput.value) / 100;
+  const hubPull = hubPullInput.checked;
   const repulsion = Number(repulsionInput.value) / 100;
   const energyRetention = Number(inertiaInput.value) / 1000;
   const gravityForce = (gravity * gravity * 0.0105 + gravity * 0.0015) * alpha;
@@ -179,8 +181,9 @@ function tick() {
   for (let i = 0; i < nodes.length; i += 1) {
     const a = nodes[i];
     if (a.fixed) continue;
-    a.vx += -a.x * gravityForce;
-    a.vy += -a.y * gravityForce;
+    const gravityWeight = hubPull ? Math.min(2.5, 1 + Math.sqrt(a.degree || 0) * 0.12) : 1;
+    a.vx += -a.x * gravityForce * gravityWeight;
+    a.vy += -a.y * gravityForce * gravityWeight;
     for (let j = i + 1; j < nodes.length; j += 1) {
       const b = nodes[j];
       const dx = b.x - a.x || 0.01;
@@ -518,6 +521,9 @@ darkModeInput.addEventListener("change", () => {
 gravityInput.addEventListener("input", () => {
   updateControlLabels();
   wake(0.25);
+});
+hubPullInput.addEventListener("change", () => {
+  wake(0.45);
 });
 repulsionInput.addEventListener("input", () => {
   updateControlLabels();
