@@ -1,3 +1,9 @@
+I'VE NOT READ A LOC OF THIS. 
+
+On the other hand, I'd not have had the time to write this otherwise, and I needed this kind of tool.
+
+Make of this what you will.
+
 # Rust Prototype
 
 Single-binary prototype for `roam-graph-html`.
@@ -9,7 +15,8 @@ http://127.0.0.1:4174
 ```
 
 It does not bundle or replace `zk`. It can either call an external `zk`
-binary from `PATH`, or consume `zk graph --format json` output from stdin.
+binary from `PATH`, or consume `zk graph --format json` output from stdin or
+a file.
 
 ## Run
 
@@ -31,6 +38,13 @@ Stdin mode consumes precomputed `zk` JSON once at startup:
 zk graph --format json --quiet | cargo run -- --stdin
 ```
 
+File mode serves precomputed `zk` JSON and does not call `zk`:
+
+```sh
+zk graph --format json --quiet > graph.json
+cargo run -- --graph-json graph.json
+```
+
 ## Build A Binary
 
 ```sh
@@ -46,7 +60,7 @@ target/release/roam-graph-html
 Runtime requirements:
 
 - default mode: `zk` available on `PATH`, and an initialized zk notebook
-- stdin mode: JSON produced by `zk graph --format json`
+- stdin or file mode: JSON produced by `zk graph --format json`
 
 Default notebook:
 
@@ -58,6 +72,7 @@ Override:
 
 ```sh
 NOTEBOOK=/path/to/notebook ./target/release/roam-graph-html
+./target/release/roam-graph-html --notebook /path/to/notebook
 ```
 
 Run with stdin:
@@ -70,4 +85,5 @@ Override port:
 
 ```sh
 PORT=8080 ./target/release/roam-graph-html
+./target/release/roam-graph-html --port 8080
 ```

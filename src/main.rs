@@ -2,6 +2,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -88,37 +89,129 @@ struct ApiStats {
 }
 
 fn main() -> std::io::Result<()> {
-    let port = env::var("PORT").unwrap_or_else(|_| "4174".to_string());
-    let notebook = default_notebook();
-    let stdin_mode = env::args().any(|arg| arg == "--stdin");
-    let cached_graph = if stdin_mode {
-        let mut input = String::new();
-        io::stdin().read_to_string(&mut input)?;
-        let graph = graph_from_zk_json(&notebook, &input)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        Some(graph)
-    } else {
-        None
+    let config = match Config::from_env_args() {
+        Ok(config) => config,
+        Err(error) if error == usage() => {
+            println!("{}", usage());
+            return Ok(());
+        }
+        Err(error) => return Err(io::Error::new(io::ErrorKind::InvalidInput, error)),
     };
+    let cached_graph = config.input_mode.read_cached_graph(&config.notebook)?;
 
-    let listener = TcpListener::bind(format!("127.0.0.1:{port}"))?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port))?;
 
-    eprintln!("roam-graph-html rust prototype: http://127.0.0.1:{port}");
-    if stdin_mode {
-        eprintln!("input: zk JSON from stdin");
-    } else {
-        eprintln!("notebook: {}", notebook.display());
-        eprintln!("source: external zk command from PATH");
-    }
+    eprintln!(
+        "roam-graph-html rust prototype: http://127.0.0.1:{}",
+        config.port
+    );
+    eprintln!("notebook: {}", config.notebook.display());
+    eprintln!("source: {}", config.input_mode.label());
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => handle_connection(stream, &notebook, cached_graph.as_ref()),
+            Ok(stream) => handle_connection(stream, &config.notebook, cached_graph.as_ref()),
             Err(error) => eprintln!("connection error: {error}"),
         }
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+struct Config {
+    port: String,
+    notebook: PathBuf,
+    input_mode: InputMode,
+}
+
+#[derive(Debug)]
+enum InputMode {
+    Zk,
+    Stdin,
+    JsonFile(PathBuf),
+}
+
+impl Config {
+    fn from_env_args() -> Result<Self, String> {
+        let mut port = env::var("PORT").unwrap_or_else(|_| "4174".to_string());
+        let mut notebook = default_notebook();
+        let mut input_mode = InputMode::Zk;
+        let mut args = env::args().skip(1);
+
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--stdin" => input_mode = input_mode.with_stdin()?,
+                "--graph-json" => {
+                    let path = next_arg(&mut args, "--graph-json")?;
+                    input_mode = input_mode.with_json_file(PathBuf::from(path))?;
+                }
+                "--notebook" | "-n" => notebook = PathBuf::from(next_arg(&mut args, &arg)?),
+                "--port" | "-p" => port = next_arg(&mut args, &arg)?,
+                "--help" | "-h" => return Err(usage().to_string()),
+                unknown => return Err(format!("unknown argument: {unknown}\n\n{}", usage())),
+            }
+        }
+
+        Ok(Self {
+            port,
+            notebook,
+            input_mode,
+        })
+    }
+}
+
+impl InputMode {
+    fn with_stdin(self) -> Result<Self, String> {
+        match self {
+            InputMode::Zk => Ok(InputMode::Stdin),
+            _ => Err("--stdin conflicts with --graph-json".to_string()),
+        }
+    }
+
+    fn with_json_file(self, path: PathBuf) -> Result<Self, String> {
+        match self {
+            InputMode::Zk => Ok(InputMode::JsonFile(path)),
+            _ => Err("--graph-json conflicts with --stdin".to_string()),
+        }
+    }
+
+    fn read_cached_graph(&self, notebook: &PathBuf) -> io::Result<Option<ApiGraph>> {
+        match self {
+            InputMode::Zk => Ok(None),
+            InputMode::Stdin => {
+                let mut input = String::new();
+                io::stdin().read_to_string(&mut input)?;
+                parse_cached_graph(notebook, &input).map(Some)
+            }
+            InputMode::JsonFile(path) => {
+                let input = fs::read_to_string(path)?;
+                parse_cached_graph(notebook, &input).map(Some)
+            }
+        }
+    }
+
+    fn label(&self) -> String {
+        match self {
+            InputMode::Zk => "external zk command from PATH".to_string(),
+            InputMode::Stdin => "zk JSON from stdin".to_string(),
+            InputMode::JsonFile(path) => format!("zk JSON file {}", path.display()),
+        }
+    }
+}
+
+fn next_arg(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
+    args.next()
+        .ok_or_else(|| format!("{flag} requires a value\n\n{}", usage()))
+}
+
+fn parse_cached_graph(notebook: &PathBuf, input: &str) -> io::Result<ApiGraph> {
+    graph_from_zk_json(notebook, input)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
+fn usage() -> &'static str {
+    "usage: roam-graph-html [--notebook PATH] [--port PORT] [--stdin | --graph-json PATH]"
 }
 
 fn default_notebook() -> PathBuf {

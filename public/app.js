@@ -28,6 +28,7 @@ let nodeById = new Map();
 let selected = null;
 let hovered = null;
 let draggingNode = null;
+let draggingNodeWasFixed = false;
 let panning = false;
 let pointerMoved = false;
 let lastPointer = { x: 0, y: 0 };
@@ -421,6 +422,7 @@ canvas.addEventListener("pointerdown", (event) => {
   draggingNode = hitTest(event);
   if (draggingNode) {
     selected = draggingNode;
+    draggingNodeWasFixed = draggingNode.fixed;
     draggingNode.fixed = true;
     draggingNode.vx = 0;
     draggingNode.vy = 0;
@@ -454,7 +456,11 @@ canvas.addEventListener("pointerup", () => {
     selected = null;
     updateDetails(null);
   }
+  if (draggingNode) {
+    draggingNode.fixed = draggingNodeWasFixed;
+  }
   draggingNode = null;
+  draggingNodeWasFixed = false;
   panning = false;
   canvas.classList.remove("dragging");
 });
@@ -462,7 +468,9 @@ canvas.addEventListener("pointerup", () => {
 canvas.addEventListener("dblclick", (event) => {
   const node = hitTest(event);
   if (node) {
-    node.fixed = false;
+    node.fixed = !node.fixed;
+    node.vx = 0;
+    node.vy = 0;
     wake(0.7);
   }
 });
