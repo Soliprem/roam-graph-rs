@@ -1,0 +1,274 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f0;
+  --panel: #fffdf8;
+  --text: #21201d;
+  --muted: #68645c;
+  --line: #d7d2c7;
+  --note: #f5f0dc;
+  --note-border: #8b6f47;
+  --tag: #dcecf2;
+  --tag-border: #37758f;
+  --accent: #275d6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.sidebar-hidden .app {
+  grid-template-columns: 1fr;
+}
+
+body.sidebar-hidden .sidebar {
+  display: none;
+}
+
+body:not(.sidebar-hidden) .show-sidebar {
+  display: none;
+}
+
+body.dark {
+  --bg: #141512;
+  --panel: #1d1e1a;
+  --text: #ece8dc;
+  --muted: #aaa498;
+  --line: #3b3a33;
+  --note: #333024;
+  --note-border: #c3a86e;
+  --tag: #17313a;
+  --tag-border: #6cb3ca;
+  --accent: #8fc9d9;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  overflow: auto;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+#notebook,
+.details,
+.stats {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--text);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.show-sidebar {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  left: 14px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: color-mix(in srgb, var(--panel), transparent 8%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.menu {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.menu summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 650;
+  list-style-position: inside;
+}
+
+.menu[open] {
+  gap: 14px;
+}
+
+.menu[open] > summary {
+  margin-bottom: 12px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.stat strong {
+  display: block;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.details {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.details dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.details dt {
+  color: var(--muted);
+}
+
+.details dd {
+  margin: 0 0 8px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.graph-pane {
+  position: relative;
+  min-width: 0;
+  background: color-mix(in srgb, var(--bg), var(--panel) 35%);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+canvas.dragging {
+  cursor: grabbing;
+}
+
+.hint {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--line), transparent 30%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel), transparent 10%);
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 220px 1fr;
+  }
+
+  body.sidebar-hidden .app {
+    grid-template-rows: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

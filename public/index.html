@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roam Graph</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar" id="sidebar">
+        <header>
+          <div class="title-row">
+            <h1>Roam Graph</h1>
+            <button id="hideSidebar" class="icon-button" type="button" title="Hide sidebar">←</button>
+          </div>
+          <p id="notebook"></p>
+        </header>
+
+        <label class="field">
+          <span>Search</span>
+          <input id="search" type="search" placeholder="Filter notes and tags" autocomplete="off" />
+        </label>
+
+        <div class="toolbar">
+          <button id="reload" type="button">Reload</button>
+          <button id="fit" type="button">Fit</button>
+        </div>
+
+        <label class="toggle">
+          <input id="showTags" type="checkbox" checked />
+          <span>Show tags</span>
+        </label>
+
+        <label class="toggle">
+          <input id="hideOrphans" type="checkbox" />
+          <span>Hide orphans</span>
+        </label>
+
+        <label class="field">
+          <span>Gravity <output id="gravityValue"></output></span>
+          <input id="gravity" type="range" min="0" max="100" value="35" />
+        </label>
+
+        <label class="field">
+          <span>Repulsion <output id="repulsionValue"></output></span>
+          <input id="repulsion" type="range" min="0" max="100" value="28" />
+        </label>
+
+        <label class="field">
+          <span>Inertia <output id="inertiaValue"></output></span>
+          <input id="inertia" type="range" min="80" max="995" value="960" />
+        </label>
+
+        <details class="menu" open>
+          <summary>Appearance</summary>
+
+          <label class="toggle">
+            <input id="showLabels" type="checkbox" checked />
+            <span>Show labels</span>
+          </label>
+
+          <label class="toggle">
+            <input id="darkMode" type="checkbox" />
+            <span>Dark mode</span>
+          </label>
+
+          <label class="field">
+            <span>Text size <output id="textSizeValue"></output></span>
+            <input id="textSize" type="range" min="10" max="28" value="17" />
+          </label>
+
+          <label class="field">
+            <span>Secondary labels <output id="secondaryLabelValue"></output></span>
+            <input id="secondaryLabels" type="range" min="0" max="100" value="45" />
+          </label>
+        </details>
+
+        <section class="stats" id="stats"></section>
+        <section class="details" id="details">
+          <h2>Selection</h2>
+          <p>Click a node to inspect it. Drag nodes to pin them.</p>
+        </section>
+      </aside>
+
+      <section class="graph-pane">
+        <button id="showSidebar" class="show-sidebar" type="button">☰</button>
+        <canvas id="graph"></canvas>
+        <div class="hint">Wheel zoom, drag background pan, drag nodes pin</div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
