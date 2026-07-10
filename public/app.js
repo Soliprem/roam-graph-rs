@@ -195,6 +195,7 @@ function tick() {
       const dy = b.y - a.y || 0.01;
       const distance2 = dx * dx + dy * dy;
       if (distance2 > 360000) continue;
+      const distance = Math.sqrt(distance2);
       const force = Math.min(1200 / distance2, 0.09) * repulsionForce;
       const fx = dx * force;
       const fy = dy * force;
@@ -205,6 +206,20 @@ function tick() {
       if (!b.fixed) {
         b.vx += fx;
         b.vy += fy;
+      }
+      const minDistance = nodeRadius(a) + nodeRadius(b) + 8;
+      if (distance < minDistance) {
+        const collisionForce = ((minDistance - distance) / minDistance) * 0.18 * alpha;
+        const cx = (dx / distance) * collisionForce;
+        const cy = (dy / distance) * collisionForce;
+        if (!a.fixed) {
+          a.vx -= cx;
+          a.vy -= cy;
+        }
+        if (!b.fixed) {
+          b.vx += cx;
+          b.vy += cy;
+        }
       }
     }
   }
