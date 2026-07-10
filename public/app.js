@@ -130,7 +130,7 @@ function labelVisible(node) {
   if (node === selected || node === hovered || selectedNeighbor(node)) return true;
   const threshold = Number(secondaryLabelsInput.value) / 100;
   const importance = Math.min(1, (node.degree || 0) / 8 + Math.log10(Math.max(1, node.wordCount || 1)) / 8);
-  const zoomVisibility = Math.min(1, Math.max(0, (transform.scale - 0.16) / 0.85));
+  const zoomVisibility = Math.min(1, Math.max(0, (transform.scale - 0.35) / 1.15));
   return importance * 0.65 + zoomVisibility * 0.35 >= threshold;
 }
 
@@ -371,11 +371,22 @@ function draw() {
       const label = node.label.length > maxChars ? `${node.label.slice(0, maxChars - 3)}...` : node.label;
       const size = nodeFontSize(node);
       ctx.font = `${size}px system-ui, sans-serif`;
-      ctx.lineWidth = Math.max(5, size * 0.36);
-      ctx.strokeStyle = darkModeInput.checked ? "rgba(12,13,11,0.96)" : "rgba(246,245,240,0.96)";
-      ctx.strokeText(label, node.x, node.y + nodeRadius(node) + 6);
+      const labelY = node.y + nodeRadius(node) + 6;
+      const metrics = ctx.measureText(label);
+      const paddingX = Math.max(4, size * 0.2);
+      const paddingY = Math.max(2, size * 0.12);
+      ctx.fillStyle = darkModeInput.checked ? "rgba(12,13,11,0.78)" : "rgba(246,245,240,0.78)";
+      ctx.beginPath();
+      ctx.roundRect(
+        node.x - metrics.width / 2 - paddingX,
+        labelY - paddingY,
+        metrics.width + paddingX * 2,
+        size + paddingY * 2,
+        Math.max(3, size * 0.18),
+      );
+      ctx.fill();
       ctx.fillStyle = selectedNeighbor(node) || node === selected || node.degree > 3 ? textColor : mutedColor;
-      ctx.fillText(label, node.x, node.y + nodeRadius(node) + 6);
+      ctx.fillText(label, node.x, labelY);
     }
   }
 
