@@ -93,8 +93,25 @@ function nodeFontSize(node) {
   return base + degreeBoost + wordBoost;
 }
 
+function readableWorldSize(worldSize, minScreenSize, maxMultiplier) {
+  const minWorldSize = minScreenSize / transform.scale;
+  return Math.min(worldSize * maxMultiplier, Math.max(worldSize, minWorldSize));
+}
+
+function visualNodeRadius(node) {
+  return readableWorldSize(nodeRadius(node), node.group === "tag" ? 5 : 6, 2.2);
+}
+
 function selectedEdge(edge) {
   return selected && (edge.from === selected.id || edge.to === selected.id);
+}
+
+function hoveredEdge(edge) {
+  return hovered && (edge.from === hovered.id || edge.to === hovered.id);
+}
+
+function highlightedEdge(edge) {
+  return selectedEdge(edge) || hoveredEdge(edge);
 }
 
 function selectedNeighbor(node) {
@@ -302,7 +319,7 @@ function draw() {
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
-    const active = selectedEdge(edge);
+    const active = highlightedEdge(edge);
     ctx.strokeStyle = active
       ? edge.kind === "tag"
         ? tagBorder
@@ -321,7 +338,7 @@ function draw() {
   ctx.setLineDash([]);
 
   for (const node of visibleNodes) {
-    const radius = nodeRadius(node);
+    const radius = visualNodeRadius(node);
     const isSelected = selected === node;
     const isHovered = hovered === node;
     const isNeighbor = selectedNeighbor(node);
@@ -337,7 +354,11 @@ function draw() {
           : noteFill;
     ctx.fill();
     ctx.strokeStyle = node.group === "tag" ? tagBorder : noteBorder;
-    ctx.lineWidth = isSelected || isNeighbor ? 3.2 : 1.6;
+    ctx.lineWidth = readableWorldSize(
+      isSelected || isNeighbor ? 3.2 : 1.6,
+      isSelected || isNeighbor ? 1.6 : 0.9,
+      2.2,
+    );
     ctx.stroke();
   }
 
@@ -383,7 +404,7 @@ function hitTest(event) {
 
 function updateDetails(node) {
   if (!node) {
-    detailsEl.innerHTML = "<h2>Selection</h2><p>Click a node to inspect it. Drag nodes to pin them.</p>";
+    detailsEl.innerHTML = "<h2>Selection</h2><p>Click a node to inspect it. Drag nodes to move them. Double-click nodes to pin or release them.</p>";
     return;
   }
   const links = visibleEdges.filter((edge) => edge.from === node.id || edge.to === node.id);
