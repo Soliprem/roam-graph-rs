@@ -29,11 +29,13 @@ let visibleNodes = [];
 let visibleEdges = [];
 let nodeById = new Map();
 let selected = null;
-let selectedIds = new Set();
-let selectedEdgeKeys = new Set();
-let primarySelectedIds = new Set();
-let primarySelectedOrder = [];
-let blockedIncidentEdgeKeys = new Set();
+let selection = { primaryIds: [], excludedIds: [], mode: "single" };
+let derivedSelection = {
+  selectedIds: new Set(),
+  pathEdgeKeys: new Set(),
+  primaryIds: new Set(),
+  incidentEdgeKeys: new Set(),
+};
 let hovered = null;
 let labelYOffset = new Map();
 let draggingNode = null;
@@ -112,30 +114,58 @@ function edgeKey(from, to) {
   return from < to ? `${from}\u0000${to}` : `${to}\u0000${from}`;
 }
 
-function edgeTouchesKey(key, id) {
-  return key.split("\u0000").includes(id);
+function deriveSelection() {
+  const visibleIds = new Set(visibleNodes.map((node) => node.id));
+  const excludedIds = new Set(selection.excludedIds);
+  const primaryIds = selection.primaryIds.filter((id) => visibleIds.has(id) && !excludedIds.has(id));
+  const selectedIds = new Set(primaryIds);
+  const pathEdgeKeys = new Set();
+  const incidentEdgeKeys = new Set();
+
+  if (selection.mode === "path") {
+    for (let index = 1; index < primaryIds.length; index += 1) {
+      const path = shortestPathIds(primaryIds[index - 1], primaryIds[index]);
+      if (!path) continue;
+      for (const id of path) {
+        if (!excludedIds.has(id)) selectedIds.add(id);
+      }
+      for (let pathIndex = 1; pathIndex < path.length; pathIndex += 1) {
+        if (!excludedIds.has(path[pathIndex - 1]) && !excludedIds.has(path[pathIndex])) {
+          pathEdgeKeys.add(edgeKey(path[pathIndex - 1], path[pathIndex]));
+        }
+      }
+    }
+  }
+
+  for (const edge of visibleEdges) {
+    if (
+      !excludedIds.has(edge.from) &&
+      !excludedIds.has(edge.to) &&
+      (primaryIds.includes(edge.from) || primaryIds.includes(edge.to))
+    ) {
+      incidentEdgeKeys.add(edgeKey(edge.from, edge.to));
+    }
+  }
+
+  return {
+    selectedIds,
+    pathEdgeKeys,
+    primaryIds: new Set(primaryIds),
+    incidentEdgeKeys,
+  };
 }
 
-function edgeKeyHasSelectedEndpoints(key) {
-  const [from, to] = key.split("\u0000");
-  return selectedIds.has(from) && selectedIds.has(to);
-}
-
-function pruneSelectedEdges() {
-  selectedEdgeKeys = new Set([...selectedEdgeKeys].filter(edgeKeyHasSelectedEndpoints));
-}
-
-function unblockIncidentEdges(id) {
-  blockedIncidentEdgeKeys = new Set(
-    [...blockedIncidentEdgeKeys].filter((key) => !edgeTouchesKey(key, id)),
-  );
+function refreshSelection() {
+  selection.primaryIds = selection.primaryIds.filter((id) => nodeById.has(id));
+  selection.excludedIds = selection.excludedIds.filter((id) => nodeById.has(id));
+  derivedSelection = deriveSelection();
+  const selectedId = selection.primaryIds.findLast((id) => derivedSelection.primaryIds.has(id));
+  selected = nodeById.get(selectedId) || null;
 }
 
 function selectedEdge(edge) {
   const key = edgeKey(edge.from, edge.to);
-  if (selectedEdgeKeys.has(key) && selectedIds.has(edge.from) && selectedIds.has(edge.to)) return true;
-  if (blockedIncidentEdgeKeys.has(edgeKey(edge.from, edge.to))) return false;
-  return primarySelectedIds.has(edge.from) || primarySelectedIds.has(edge.to);
+  return derivedSelection.pathEdgeKeys.has(key) || derivedSelection.incidentEdgeKeys.has(key);
 }
 
 function hoveredEdge(edge) {
@@ -148,8 +178,8 @@ function highlightedEdge(edge) {
 
 function selectedNeighbor(node) {
   return (
-    primarySelectedIds.size > 0 &&
-    !selectedIds.has(node.id) &&
+    derivedSelection.primaryIds.size > 0 &&
+    !derivedSelection.selectedIds.has(node.id) &&
     visibleEdges.some(
       (edge) =>
         selectedEdge(edge) &&
@@ -159,7 +189,7 @@ function selectedNeighbor(node) {
 }
 
 function labelVisible(node) {
-  if (primarySelectedIds.has(node.id) || node === hovered) return true;
+  if (derivedSelection.primaryIds.has(node.id) || node === hovered) return true;
   const threshold = Number(secondaryLabelsInput.value) / 100;
   const importance = Math.min(1, (node.degree || 0) / 8 + Math.log10(Math.max(1, node.wordCount || 1)) / 8);
   const zoomVisibility = Math.min(1, Math.max(0, (transform.scale - 0.35) / 1.15));
@@ -199,44 +229,24 @@ function shortestPathIds(fromId, toId) {
 }
 
 function selectNode(node, event) {
-  const anchorId = primarySelectedOrder.at(-1) || selected?.id;
-  if ((event.shiftKey || event.ctrlKey || event.metaKey) && selectedIds.has(node.id)) {
-    selectedIds.delete(node.id);
-    primarySelectedIds.delete(node.id);
-    primarySelectedOrder = primarySelectedOrder.filter((id) => id !== node.id);
-    selectedEdgeKeys = new Set(
-      [...selectedEdgeKeys].filter((key) => !edgeTouchesKey(key, node.id)),
-    );
-    for (const edge of visibleEdges) {
-      if (edge.from === node.id || edge.to === node.id) {
-        blockedIncidentEdgeKeys.add(edgeKey(edge.from, edge.to));
-      }
-    }
+  const excludedIds = new Set(selection.excludedIds);
+  const anchorId = selection.primaryIds.findLast((id) => !excludedIds.has(id));
+  if ((event.shiftKey || event.ctrlKey || event.metaKey) && derivedSelection.selectedIds.has(node.id)) {
+    selection.primaryIds = selection.primaryIds.filter((id) => id !== node.id);
+    if (!selection.excludedIds.includes(node.id)) selection.excludedIds.push(node.id);
   } else if (event.shiftKey && anchorId) {
-    const path = shortestPathIds(anchorId, node.id) || [anchorId, node.id];
-    for (const id of path) selectedIds.add(id);
-    for (let index = 1; index < path.length; index += 1) {
-      selectedEdgeKeys.add(edgeKey(path[index - 1], path[index]));
-    }
-    for (const id of path) unblockIncidentEdges(id);
-    primarySelectedIds.add(anchorId);
-    if (!primarySelectedOrder.includes(anchorId)) primarySelectedOrder.push(anchorId);
-    if (!primarySelectedIds.has(node.id)) primarySelectedOrder.push(node.id);
-    primarySelectedIds.add(node.id);
+    selection.mode = "path";
+    selection.excludedIds = selection.excludedIds.filter((id) => id !== node.id);
+    selection.primaryIds.push(node.id);
   } else if (event.ctrlKey || event.metaKey) {
-    primarySelectedIds.add(node.id);
-    selectedIds.add(node.id);
-    unblockIncidentEdges(node.id);
-    primarySelectedOrder.push(node.id);
+    selection.mode = "multi";
+    selection.excludedIds = selection.excludedIds.filter((id) => id !== node.id);
+    selection.primaryIds.push(node.id);
   } else {
-    selectedIds = new Set([node.id]);
-    selectedEdgeKeys.clear();
-    primarySelectedIds = new Set([node.id]);
-    primarySelectedOrder = [node.id];
-    blockedIncidentEdgeKeys.clear();
+    selection = { primaryIds: [node.id], excludedIds: [], mode: "single" };
   }
-  pruneSelectedEdges();
-  selected = primarySelectedIds.has(node.id) ? node : nodeById.get(primarySelectedOrder.at(-1)) || null;
+  if (selection.primaryIds.length <= 1 && selection.mode !== "single") selection.mode = "single";
+  refreshSelection();
   updateDetails(selected);
 }
 
@@ -298,14 +308,10 @@ function applyFilters() {
 
   visibleNodes = graph.nodes.filter((node) => include.has(node.id));
   visibleEdges = graph.edges.filter((edge) => include.has(edge.from) && include.has(edge.to));
-  const visibleEdgeKeys = new Set(visibleEdges.map((edge) => edgeKey(edge.from, edge.to)));
-  selectedIds = new Set([...selectedIds].filter((id) => include.has(id)));
-  selectedEdgeKeys = new Set([...selectedEdgeKeys].filter((key) => visibleEdgeKeys.has(key)));
-  pruneSelectedEdges();
-  primarySelectedIds = new Set([...primarySelectedIds].filter((id) => include.has(id)));
-  blockedIncidentEdgeKeys = new Set([...blockedIncidentEdgeKeys].filter((key) => visibleEdgeKeys.has(key)));
-  primarySelectedOrder = primarySelectedOrder.filter((id) => include.has(id));
-  selected = selected && include.has(selected.id) ? selected : nodeById.get(primarySelectedOrder.at(-1)) || null;
+  selection.primaryIds = selection.primaryIds.filter((id) => include.has(id));
+  selection.excludedIds = selection.excludedIds.filter((id) => include.has(id));
+  if (selection.primaryIds.length <= 1) selection.mode = "single";
+  refreshSelection();
 }
 
 function tick() {
@@ -452,7 +458,7 @@ function draw() {
 
   for (const node of visibleNodes) {
     const radius = visualNodeRadius(node);
-    const isSelected = selectedIds.has(node.id);
+    const isSelected = derivedSelection.selectedIds.has(node.id);
     const isHovered = hovered === node;
     const isNeighbor = selectedNeighbor(node);
     ctx.beginPath();
@@ -484,7 +490,7 @@ function draw() {
     for (const node of visibleNodes) {
       if (!labelVisible(node)) continue;
       visibleLabelIds.add(node.id);
-      const maxChars = primarySelectedIds.has(node.id) || node === hovered ? 54 : 38;
+      const maxChars = derivedSelection.primaryIds.has(node.id) || node === hovered ? 54 : 38;
       const label = node.label.length > maxChars ? `${node.label.slice(0, maxChars - 3)}...` : node.label;
       const size = nodeFontSize(node);
       ctx.font = `${size}px system-ui, sans-serif`;
@@ -513,7 +519,7 @@ function draw() {
         Math.max(3, size * 0.18),
       );
       ctx.fill();
-      ctx.fillStyle = selectedNeighbor(node) || selectedIds.has(node.id) || node.degree > 3 ? textColor : mutedColor;
+      ctx.fillStyle = selectedNeighbor(node) || derivedSelection.selectedIds.has(node.id) || node.degree > 3 ? textColor : mutedColor;
       ctx.fillText(label, nodeScreen.x, labelY);
     }
 
@@ -604,6 +610,8 @@ async function loadGraph() {
   if (!response.ok) throw new Error(data.error || "Failed to load graph");
   graph = data;
   nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  selection = { primaryIds: [], excludedIds: [], mode: "single" };
+  refreshSelection();
   labelYOffset.clear();
   initPositions();
   applyFilters();
@@ -655,12 +663,8 @@ canvas.addEventListener("pointerup", (event) => {
   }
   if (!pointerMoved && !draggingNode) {
     if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
-      selected = null;
-      selectedIds.clear();
-      selectedEdgeKeys.clear();
-      primarySelectedIds.clear();
-      primarySelectedOrder = [];
-      blockedIncidentEdgeKeys.clear();
+      selection = { primaryIds: [], excludedIds: [], mode: "single" };
+      refreshSelection();
       updateDetails(null);
     }
   }
