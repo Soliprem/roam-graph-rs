@@ -29,6 +29,11 @@ let visibleNodes = [];
 let visibleEdges = [];
 let nodeById = new Map();
 let selected = null;
+let selectedIds = new Set();
+let selectedEdgeKeys = new Set();
+let primarySelectedIds = new Set();
+let primarySelectedOrder = [];
+let removedSelectedIds = new Set();
 let hovered = null;
 let labelYOffset = new Map();
 let draggingNode = null;
@@ -103,8 +108,14 @@ function visualNodeRadius(node) {
   return readableWorldSize(nodeRadius(node), node.group === "tag" ? 5 : 6, 2.2);
 }
 
+function edgeKey(from, to) {
+  return from < to ? `${from}\u0000${to}` : `${to}\u0000${from}`;
+}
+
 function selectedEdge(edge) {
-  return selected && (edge.from === selected.id || edge.to === selected.id);
+  if (removedSelectedIds.has(edge.from) || removedSelectedIds.has(edge.to)) return false;
+  if (selectedEdgeKeys.has(edgeKey(edge.from, edge.to))) return true;
+  return primarySelectedIds.has(edge.from) || primarySelectedIds.has(edge.to);
 }
 
 function hoveredEdge(edge) {
@@ -117,8 +128,8 @@ function highlightedEdge(edge) {
 
 function selectedNeighbor(node) {
   return (
-    selected &&
-    node !== selected &&
+    primarySelectedIds.size > 0 &&
+    !selectedIds.has(node.id) &&
     visibleEdges.some(
       (edge) =>
         selectedEdge(edge) &&
@@ -128,11 +139,80 @@ function selectedNeighbor(node) {
 }
 
 function labelVisible(node) {
-  if (node === selected || node === hovered) return true;
+  if (primarySelectedIds.has(node.id) || node === hovered) return true;
   const threshold = Number(secondaryLabelsInput.value) / 100;
   const importance = Math.min(1, (node.degree || 0) / 8 + Math.log10(Math.max(1, node.wordCount || 1)) / 8);
   const zoomVisibility = Math.min(1, Math.max(0, (transform.scale - 0.35) / 1.15));
   return importance * 0.65 + zoomVisibility * 0.35 >= threshold;
+}
+
+function shortestPathIds(fromId, toId) {
+  if (fromId === toId) return [fromId];
+  const visibleIds = new Set(visibleNodes.map((node) => node.id));
+  if (!visibleIds.has(fromId) || !visibleIds.has(toId)) return null;
+
+  const neighbors = new Map();
+  for (const edge of visibleEdges) {
+    if (!neighbors.has(edge.from)) neighbors.set(edge.from, []);
+    if (!neighbors.has(edge.to)) neighbors.set(edge.to, []);
+    neighbors.get(edge.from).push(edge.to);
+    neighbors.get(edge.to).push(edge.from);
+  }
+
+  const queue = [fromId];
+  const previous = new Map([[fromId, null]]);
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index];
+    for (const next of neighbors.get(current) || []) {
+      if (previous.has(next)) continue;
+      previous.set(next, current);
+      if (next === toId) {
+        const path = [];
+        for (let id = toId; id; id = previous.get(id)) path.push(id);
+        return path.reverse();
+      }
+      queue.push(next);
+    }
+  }
+
+  return null;
+}
+
+function selectNode(node, event) {
+  const anchorId = primarySelectedOrder.at(-1) || selected?.id;
+  if ((event.shiftKey || event.ctrlKey || event.metaKey) && selectedIds.has(node.id)) {
+    selectedIds.delete(node.id);
+    primarySelectedIds.delete(node.id);
+    primarySelectedOrder = primarySelectedOrder.filter((id) => id !== node.id);
+    removedSelectedIds.add(node.id);
+    selectedEdgeKeys = new Set(
+      [...selectedEdgeKeys].filter((key) => !key.split("\u0000").includes(node.id)),
+    );
+  } else if (event.shiftKey && anchorId) {
+    const path = shortestPathIds(anchorId, node.id) || [anchorId, node.id];
+    for (const id of path) selectedIds.add(id);
+    for (let index = 1; index < path.length; index += 1) {
+      selectedEdgeKeys.add(edgeKey(path[index - 1], path[index]));
+    }
+    for (const id of path) removedSelectedIds.delete(id);
+    primarySelectedIds.add(anchorId);
+    if (!primarySelectedOrder.includes(anchorId)) primarySelectedOrder.push(anchorId);
+    if (!primarySelectedIds.has(node.id)) primarySelectedOrder.push(node.id);
+    primarySelectedIds.add(node.id);
+  } else if (event.ctrlKey || event.metaKey) {
+    primarySelectedIds.add(node.id);
+    selectedIds.add(node.id);
+    removedSelectedIds.delete(node.id);
+    primarySelectedOrder.push(node.id);
+  } else {
+    selectedIds = new Set([node.id]);
+    selectedEdgeKeys.clear();
+    primarySelectedIds = new Set([node.id]);
+    primarySelectedOrder = [node.id];
+    removedSelectedIds.clear();
+  }
+  selected = primarySelectedIds.has(node.id) ? node : nodeById.get(primarySelectedOrder.at(-1)) || null;
+  updateDetails(selected);
 }
 
 function initPositions() {
@@ -193,7 +273,13 @@ function applyFilters() {
 
   visibleNodes = graph.nodes.filter((node) => include.has(node.id));
   visibleEdges = graph.edges.filter((edge) => include.has(edge.from) && include.has(edge.to));
-  selected = selected && include.has(selected.id) ? selected : null;
+  const visibleEdgeKeys = new Set(visibleEdges.map((edge) => edgeKey(edge.from, edge.to)));
+  selectedIds = new Set([...selectedIds].filter((id) => include.has(id)));
+  selectedEdgeKeys = new Set([...selectedEdgeKeys].filter((key) => visibleEdgeKeys.has(key)));
+  primarySelectedIds = new Set([...primarySelectedIds].filter((id) => include.has(id)));
+  removedSelectedIds = new Set([...removedSelectedIds].filter((id) => include.has(id)));
+  primarySelectedOrder = primarySelectedOrder.filter((id) => include.has(id));
+  selected = selected && include.has(selected.id) ? selected : nodeById.get(primarySelectedOrder.at(-1)) || null;
 }
 
 function tick() {
@@ -340,7 +426,7 @@ function draw() {
 
   for (const node of visibleNodes) {
     const radius = visualNodeRadius(node);
-    const isSelected = selected === node;
+    const isSelected = selectedIds.has(node.id);
     const isHovered = hovered === node;
     const isNeighbor = selectedNeighbor(node);
     ctx.beginPath();
@@ -372,7 +458,7 @@ function draw() {
     for (const node of visibleNodes) {
       if (!labelVisible(node)) continue;
       visibleLabelIds.add(node.id);
-      const maxChars = node === selected || node === hovered ? 54 : 38;
+      const maxChars = primarySelectedIds.has(node.id) || node === hovered ? 54 : 38;
       const label = node.label.length > maxChars ? `${node.label.slice(0, maxChars - 3)}...` : node.label;
       const size = nodeFontSize(node);
       ctx.font = `${size}px system-ui, sans-serif`;
@@ -401,7 +487,7 @@ function draw() {
         Math.max(3, size * 0.18),
       );
       ctx.fill();
-      ctx.fillStyle = selectedNeighbor(node) || node === selected || node.degree > 3 ? textColor : mutedColor;
+      ctx.fillStyle = selectedNeighbor(node) || selectedIds.has(node.id) || node.degree > 3 ? textColor : mutedColor;
       ctx.fillText(label, nodeScreen.x, labelY);
     }
 
@@ -425,7 +511,7 @@ function hitTest(event) {
   let bestDistance = Infinity;
   for (const node of visibleNodes) {
     const distance = Math.hypot(point.x - node.x, point.y - node.y);
-    if (distance < nodeRadius(node) + 8 && distance < bestDistance) {
+    if (distance < visualNodeRadius(node) + 8 / transform.scale && distance < bestDistance) {
       best = node;
       bestDistance = distance;
     }
@@ -508,12 +594,11 @@ canvas.addEventListener("pointerdown", (event) => {
   lastPointer = { x: event.clientX, y: event.clientY };
   draggingNode = hitTest(event);
   if (draggingNode) {
-    selected = draggingNode;
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) selectNode(draggingNode, event);
     draggingNodeWasFixed = draggingNode.fixed;
     draggingNode.fixed = true;
     draggingNode.vx = 0;
     draggingNode.vy = 0;
-    updateDetails(selected);
     wake(0.85);
   } else {
     panning = true;
@@ -538,10 +623,20 @@ canvas.addEventListener("pointermove", (event) => {
   lastPointer = { x: event.clientX, y: event.clientY };
 });
 
-canvas.addEventListener("pointerup", () => {
+canvas.addEventListener("pointerup", (event) => {
+  if (!pointerMoved && draggingNode) {
+    selectNode(draggingNode, event);
+  }
   if (!pointerMoved && !draggingNode) {
-    selected = null;
-    updateDetails(null);
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      selected = null;
+      selectedIds.clear();
+      selectedEdgeKeys.clear();
+      primarySelectedIds.clear();
+      primarySelectedOrder = [];
+      removedSelectedIds.clear();
+      updateDetails(null);
+    }
   }
   if (draggingNode) {
     draggingNode.fixed = draggingNodeWasFixed;
