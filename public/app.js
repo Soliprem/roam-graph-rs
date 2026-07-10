@@ -119,11 +119,7 @@ function labelVisible(node) {
 
 function initPositions() {
   const count = graph.nodes.length || 1;
-  graph.nodes.forEach((node, index) => {
-    const angle = (index / count) * Math.PI * 2;
-    const radius = 80 + Math.sqrt(count) * 22;
-    node.x = Math.cos(angle) * radius + (Math.random() - 0.5) * 80;
-    node.y = Math.sin(angle) * radius + (Math.random() - 0.5) * 80;
+  graph.nodes.forEach((node) => {
     node.vx = 0;
     node.vy = 0;
     node.degree = 0;
@@ -136,6 +132,21 @@ function initPositions() {
       nodeById.get(edge.from).noteDegree += 1;
       nodeById.get(edge.to).noteDegree += 1;
     }
+  });
+  const mainRadius = 80 + Math.sqrt(count) * 22;
+  const orphanRadius = mainRadius + 110 + Math.sqrt(count) * 8;
+  const orphans = graph.nodes.filter((node) => node.group === "note" && (node.noteDegree || 0) === 0);
+  let orphanIndex = 0;
+
+  graph.nodes.forEach((node, index) => {
+    const orphan = node.group === "note" && (node.noteDegree || 0) === 0;
+    const ringCount = orphan ? Math.max(1, orphans.length) : count;
+    const ringIndex = orphan ? orphanIndex++ : index;
+    const angle = (ringIndex / ringCount) * Math.PI * 2;
+    const radius = orphan ? orphanRadius : mainRadius;
+    const jitter = orphan ? 28 : 80;
+    node.x = Math.cos(angle) * radius + (Math.random() - 0.5) * jitter;
+    node.y = Math.sin(angle) * radius + (Math.random() - 0.5) * jitter;
   });
 }
 
@@ -450,7 +461,7 @@ canvas.addEventListener("pointerdown", (event) => {
     draggingNode.vx = 0;
     draggingNode.vy = 0;
     updateDetails(selected);
-    wake(0.5);
+    wake(0.85);
   } else {
     panning = true;
   }
@@ -466,7 +477,7 @@ canvas.addEventListener("pointermove", (event) => {
     draggingNode.y = point.y;
     draggingNode.vx = 0;
     draggingNode.vy = 0;
-    wake(0.4);
+    wake(1);
   } else if (panning) {
     transform.x += event.clientX - lastPointer.x;
     transform.y += event.clientY - lastPointer.y;
