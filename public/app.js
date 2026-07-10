@@ -30,6 +30,7 @@ let visibleEdges = [];
 let nodeById = new Map();
 let selected = null;
 let hovered = null;
+let labelYOffset = new Map();
 let draggingNode = null;
 let draggingNodeWasFixed = false;
 let panning = false;
@@ -127,7 +128,7 @@ function selectedNeighbor(node) {
 }
 
 function labelVisible(node) {
-  if (node === selected || node === hovered || selectedNeighbor(node)) return true;
+  if (node === selected || node === hovered) return true;
   const threshold = Number(secondaryLabelsInput.value) / 100;
   const importance = Math.min(1, (node.degree || 0) / 8 + Math.log10(Math.max(1, node.wordCount || 1)) / 8);
   const zoomVisibility = Math.min(1, Math.max(0, (transform.scale - 0.35) / 1.15));
@@ -362,23 +363,38 @@ function draw() {
     ctx.stroke();
   }
 
+  ctx.restore();
+
   if (showLabelsInput.checked) {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    const visibleLabelIds = new Set();
     for (const node of visibleNodes) {
       if (!labelVisible(node)) continue;
-      const maxChars = node === selected || selectedNeighbor(node) ? 54 : 38;
+      visibleLabelIds.add(node.id);
+      const maxChars = node === selected || node === hovered ? 54 : 38;
       const label = node.label.length > maxChars ? `${node.label.slice(0, maxChars - 3)}...` : node.label;
       const size = nodeFontSize(node);
       ctx.font = `${size}px system-ui, sans-serif`;
-      const labelY = node.y + nodeRadius(node) + 6;
+      const nodeScreen = screenFromWorld(node.x, node.y);
+      const baseY = nodeScreen.y + visualNodeRadius(node) * transform.scale + 6;
+      const targetOffset = node === hovered ? Math.max(0, lastPointer.y + 16 - baseY) : 0;
+      const previousOffset = labelYOffset.get(node.id);
+      const labelOffset =
+        previousOffset === undefined
+          ? node === hovered
+            ? targetOffset
+            : 10
+          : previousOffset + (targetOffset - previousOffset) * 0.28;
+      labelYOffset.set(node.id, labelOffset);
+      const labelY = baseY + labelOffset;
       const metrics = ctx.measureText(label);
       const paddingX = Math.max(4, size * 0.2);
       const paddingY = Math.max(2, size * 0.12);
       ctx.fillStyle = darkModeInput.checked ? "rgba(12,13,11,0.78)" : "rgba(246,245,240,0.78)";
       ctx.beginPath();
       ctx.roundRect(
-        node.x - metrics.width / 2 - paddingX,
+        nodeScreen.x - metrics.width / 2 - paddingX,
         labelY - paddingY,
         metrics.width + paddingX * 2,
         size + paddingY * 2,
@@ -386,11 +402,15 @@ function draw() {
       );
       ctx.fill();
       ctx.fillStyle = selectedNeighbor(node) || node === selected || node.degree > 3 ? textColor : mutedColor;
-      ctx.fillText(label, node.x, labelY);
+      ctx.fillText(label, nodeScreen.x, labelY);
     }
-  }
 
-  ctx.restore();
+    for (const id of labelYOffset.keys()) {
+      if (!visibleLabelIds.has(id)) labelYOffset.delete(id);
+    }
+  } else {
+    labelYOffset.clear();
+  }
 }
 
 function animate() {
@@ -472,6 +492,7 @@ async function loadGraph() {
   if (!response.ok) throw new Error(data.error || "Failed to load graph");
   graph = data;
   nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  labelYOffset.clear();
   initPositions();
   applyFilters();
   updateStats(data);
