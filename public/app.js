@@ -8,11 +8,13 @@ const darkModeInput = document.querySelector("#darkMode");
 const gravityInput = document.querySelector("#gravity");
 const hubPullInput = document.querySelector("#hubPull");
 const repulsionInput = document.querySelector("#repulsion");
+const linkStrengthInput = document.querySelector("#linkStrength");
 const inertiaInput = document.querySelector("#inertia");
 const textSizeInput = document.querySelector("#textSize");
 const secondaryLabelsInput = document.querySelector("#secondaryLabels");
 const gravityValue = document.querySelector("#gravityValue");
 const repulsionValue = document.querySelector("#repulsionValue");
+const linkStrengthValue = document.querySelector("#linkStrengthValue");
 const inertiaValue = document.querySelector("#inertiaValue");
 const textSizeValue = document.querySelector("#textSizeValue");
 const secondaryLabelValue = document.querySelector("#secondaryLabelValue");
@@ -49,6 +51,7 @@ function wake(amount = 1) {
 function updateControlLabels() {
   gravityValue.textContent = gravityInput.value;
   repulsionValue.textContent = repulsionInput.value;
+  linkStrengthValue.textContent = linkStrengthInput.value;
   inertiaValue.textContent = (Number(inertiaInput.value) / 1000).toFixed(3);
   textSizeValue.textContent = textSizeInput.value;
   secondaryLabelValue.textContent = secondaryLabelsInput.value;
@@ -172,9 +175,11 @@ function tick() {
   const gravity = Number(gravityInput.value) / 100;
   const hubPull = hubPullInput.checked;
   const repulsion = Number(repulsionInput.value) / 100;
+  const linkStrength = Number(linkStrengthInput.value) / 100;
   const energyRetention = Number(inertiaInput.value) / 1000;
   const gravityForce = (gravity * gravity * 0.0105 + gravity * 0.0015) * alpha;
   const repulsionForce = (0.08 + repulsion * repulsion * 0.92) * alpha;
+  const linkStrengthForce = 0.002 + linkStrength * 0.017142857;
   const linkDistance = 90;
   simulationTicks += 1;
 
@@ -212,7 +217,7 @@ function tick() {
     const dy = b.y - a.y;
     const distance = Math.hypot(dx, dy) || 1;
     const desired = edge.kind === "tag" ? 70 : linkDistance;
-    const force = (distance - desired) * 0.008 * alpha;
+    const force = (distance - desired) * linkStrengthForce * alpha;
     const fx = (dx / distance) * force;
     const fy = (dy / distance) * force;
     if (!a.fixed) {
@@ -526,6 +531,10 @@ hubPullInput.addEventListener("change", () => {
   wake(0.45);
 });
 repulsionInput.addEventListener("input", () => {
+  updateControlLabels();
+  wake(0.25);
+});
+linkStrengthInput.addEventListener("input", () => {
   updateControlLabels();
   wake(0.25);
 });
