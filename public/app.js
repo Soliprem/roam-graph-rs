@@ -33,7 +33,7 @@ let selectedIds = new Set();
 let selectedEdgeKeys = new Set();
 let primarySelectedIds = new Set();
 let primarySelectedOrder = [];
-let removedSelectedIds = new Set();
+let blockedIncidentEdgeKeys = new Set();
 let hovered = null;
 let labelYOffset = new Map();
 let draggingNode = null;
@@ -112,9 +112,29 @@ function edgeKey(from, to) {
   return from < to ? `${from}\u0000${to}` : `${to}\u0000${from}`;
 }
 
+function edgeTouchesKey(key, id) {
+  return key.split("\u0000").includes(id);
+}
+
+function edgeKeyHasSelectedEndpoints(key) {
+  const [from, to] = key.split("\u0000");
+  return selectedIds.has(from) && selectedIds.has(to);
+}
+
+function pruneSelectedEdges() {
+  selectedEdgeKeys = new Set([...selectedEdgeKeys].filter(edgeKeyHasSelectedEndpoints));
+}
+
+function unblockIncidentEdges(id) {
+  blockedIncidentEdgeKeys = new Set(
+    [...blockedIncidentEdgeKeys].filter((key) => !edgeTouchesKey(key, id)),
+  );
+}
+
 function selectedEdge(edge) {
-  if (removedSelectedIds.has(edge.from) || removedSelectedIds.has(edge.to)) return false;
-  if (selectedEdgeKeys.has(edgeKey(edge.from, edge.to))) return true;
+  const key = edgeKey(edge.from, edge.to);
+  if (selectedEdgeKeys.has(key) && selectedIds.has(edge.from) && selectedIds.has(edge.to)) return true;
+  if (blockedIncidentEdgeKeys.has(edgeKey(edge.from, edge.to))) return false;
   return primarySelectedIds.has(edge.from) || primarySelectedIds.has(edge.to);
 }
 
@@ -184,17 +204,21 @@ function selectNode(node, event) {
     selectedIds.delete(node.id);
     primarySelectedIds.delete(node.id);
     primarySelectedOrder = primarySelectedOrder.filter((id) => id !== node.id);
-    removedSelectedIds.add(node.id);
     selectedEdgeKeys = new Set(
-      [...selectedEdgeKeys].filter((key) => !key.split("\u0000").includes(node.id)),
+      [...selectedEdgeKeys].filter((key) => !edgeTouchesKey(key, node.id)),
     );
+    for (const edge of visibleEdges) {
+      if (edge.from === node.id || edge.to === node.id) {
+        blockedIncidentEdgeKeys.add(edgeKey(edge.from, edge.to));
+      }
+    }
   } else if (event.shiftKey && anchorId) {
     const path = shortestPathIds(anchorId, node.id) || [anchorId, node.id];
     for (const id of path) selectedIds.add(id);
     for (let index = 1; index < path.length; index += 1) {
       selectedEdgeKeys.add(edgeKey(path[index - 1], path[index]));
     }
-    for (const id of path) removedSelectedIds.delete(id);
+    for (const id of path) unblockIncidentEdges(id);
     primarySelectedIds.add(anchorId);
     if (!primarySelectedOrder.includes(anchorId)) primarySelectedOrder.push(anchorId);
     if (!primarySelectedIds.has(node.id)) primarySelectedOrder.push(node.id);
@@ -202,15 +226,16 @@ function selectNode(node, event) {
   } else if (event.ctrlKey || event.metaKey) {
     primarySelectedIds.add(node.id);
     selectedIds.add(node.id);
-    removedSelectedIds.delete(node.id);
+    unblockIncidentEdges(node.id);
     primarySelectedOrder.push(node.id);
   } else {
     selectedIds = new Set([node.id]);
     selectedEdgeKeys.clear();
     primarySelectedIds = new Set([node.id]);
     primarySelectedOrder = [node.id];
-    removedSelectedIds.clear();
+    blockedIncidentEdgeKeys.clear();
   }
+  pruneSelectedEdges();
   selected = primarySelectedIds.has(node.id) ? node : nodeById.get(primarySelectedOrder.at(-1)) || null;
   updateDetails(selected);
 }
@@ -276,8 +301,9 @@ function applyFilters() {
   const visibleEdgeKeys = new Set(visibleEdges.map((edge) => edgeKey(edge.from, edge.to)));
   selectedIds = new Set([...selectedIds].filter((id) => include.has(id)));
   selectedEdgeKeys = new Set([...selectedEdgeKeys].filter((key) => visibleEdgeKeys.has(key)));
+  pruneSelectedEdges();
   primarySelectedIds = new Set([...primarySelectedIds].filter((id) => include.has(id)));
-  removedSelectedIds = new Set([...removedSelectedIds].filter((id) => include.has(id)));
+  blockedIncidentEdgeKeys = new Set([...blockedIncidentEdgeKeys].filter((key) => visibleEdgeKeys.has(key)));
   primarySelectedOrder = primarySelectedOrder.filter((id) => include.has(id));
   selected = selected && include.has(selected.id) ? selected : nodeById.get(primarySelectedOrder.at(-1)) || null;
 }
@@ -634,7 +660,7 @@ canvas.addEventListener("pointerup", (event) => {
       selectedEdgeKeys.clear();
       primarySelectedIds.clear();
       primarySelectedOrder = [];
-      removedSelectedIds.clear();
+      blockedIncidentEdgeKeys.clear();
       updateDetails(null);
     }
   }
